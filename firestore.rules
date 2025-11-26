@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default fallback: read allowed only for specific admin email, no writes.
+    match /{document=**} {
+      allow read: if request.auth != null && request.auth.token.email == 'mohamedsallu.sl@gmail.com';
+      allow write: if false;
+    }
+
+    // Helper: check admin custom claim
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Validation for vocabulary category documents
+    function validCategoryPayload() {
+      return
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.name.size() <= 200 &&
+        (
+          !request.resource.data.keys().hasAny(['id']) ||
+          (request.resource.data.id is string && request.resource.data.id.size() <= 100)
+        );
+    }
+
+    // Validation for term documents (includes optional categoryId reference)
+    function validTermPayload() {
+      return
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.name.size() <= 200 &&
+        request.resource.data.definition is string &&
+        request.resource.data.definition.size() > 0 &&
+        request.resource.data.definition.size() <= 5000 &&
+        request.resource.data.active is bool &&
+        (
+          !request.resource.data.keys().hasAny(['id']) ||
+          (request.resource.data.id is string && request.resource.data.id.size() <= 100)
+        ) &&
+        (
+          // categoryId may be missing, null, or empty string OR if provided must reference an existing category
+          !request.resource.data.keys().hasAny(['categoryId']) ||
+          request.resource.data.categoryId == null ||
+          request.resource.data.categoryId == '' ||
+          (
+            request.resource.data.categoryId is string &&
+            exists(/databases/$(database)/documents/vocabulary_categories/$(request.resource.data.categoryId))
+          )
+        );
+    }
+
+    // vocabulary_categories collection: only admins may read/write, with payload validation.
+    match /vocabulary_categories/{catId} {
+      allow get, list: if request.auth != null && isAdmin();
+      allow create: if request.auth != null && isAdmin() && validCategoryPayload();
+      allow update: if request.auth != null && isAdmin()
+                    && validCategoryPayload()
+                    && ( !resource.data.keys().hasAny(['createdAt']) || resource.data.createdAt == request.resource.data.createdAt );
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // terms collection: only admins may read/write, with payload validation including categoryId check.
+    match /terms/{termId} {
+      allow get, list: if request.auth != null && isAdmin();
+      allow create: if request.auth != null && isAdmin() && validTermPayload();
+      allow update: if request.auth != null && isAdmin()
+                    && validTermPayload()
+                    && ( !resource.data.keys().hasAny(['createdAt']) || resource.data.createdAt == request.resource.data.createdAt );
+      allow delete: if request.auth != null && isAdmin();
+    }
+  }
+}
