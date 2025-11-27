@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
-import { signupWithEmail, signInWithGoogle, auth } from '../firebase';
-import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
+import { authSignUp, authSignInWithProvider } from '../supabaseClient';
 
 export default function Signup({ onBack }) {
   const [name, setName] = useState('');
@@ -17,16 +16,12 @@ export default function Signup({ onBack }) {
       return;
     }
     try {
-      // default to session persistence unless user wants remember
-      try {
-        await setPersistence(auth, browserSessionPersistence);
-      } catch (persErr) {
-        console.warn('Persistence set failed', persErr);
-      }
-
-      const cred = await signupWithEmail(name, email, password);
-      console.log('Signed up:', cred.user);
-      setModal({ open: true, variant: 'success', title: 'Account created', message: 'Your account was created successfully.' });
+      const res = await authSignUp(email, password, { data: { name } });
+      if (res.error) throw res.error;
+      setModal({ open: true, variant: 'success', title: 'Account created', message: 'Your account was created successfully. Please check your email to confirm.' });
+      const userEmail = res?.data?.user?.email?.toLowerCase();
+      const adminEmail = 'mohamedsallu.sl@gmail.com';
+      setTimeout(() => { window.location.href = (userEmail === adminEmail ? '/admin' : '/'); }, 900);
     } catch (err) {
       console.error(err);
       setModal({ open: true, variant: 'error', title: 'Signup failed', message: err.message || String(err) });
@@ -35,15 +30,9 @@ export default function Signup({ onBack }) {
 
   async function google() {
     try {
-      // by default sign in with session persistence for new signup via Google
-      try {
-        await setPersistence(auth, browserSessionPersistence);
-      } catch (persErr) {
-        console.warn('Persistence set failed', persErr);
-      }
-      const res = await signInWithGoogle();
-      console.log('Google signup result', res.user);
-      setModal({ open: true, variant: 'success', title: 'Signed up', message: 'Signed up with Google successfully.' });
+      const res = await authSignInWithProvider('google');
+      if (res.error) throw res.error;
+      setModal({ open: true, variant: 'info', title: 'Redirecting', message: 'Proceeding to Google sign-in...' });
     } catch (err) {
       console.error(err);
       setModal({ open: true, variant: 'error', title: 'Google signup failed', message: err.message || String(err) });
@@ -57,7 +46,7 @@ export default function Signup({ onBack }) {
   }
 
   return (
-    <div className="auth-screen gradient-bg-full">
+    <div className="auth-screen" style={{ backgroundColor: '#fff', minHeight: '100vh', paddingTop: 28 }}>
       <div className="auth-card">
         <div className="auth-card-bar top" />
         <div className="auth-card-body">

@@ -4,33 +4,29 @@ import Modal from '../components/Modal';
 import Sidebar from '../components/Sidebar';
 import TermsManager from '../admin/TermsManager';
 import VocabularyCategoriesManager from '../admin/VocabularyCategoriesManager';
-import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { loginWithEmail, logout, auth } from '../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import PhotosManager from '../admin/PhotosManager';
+import VideosManager from '../admin/VideosManager';
+import QuizzesManager from '../admin/QuizzesManager';
+import { supabase, authSignIn, authSignOut } from '../supabaseClient';
+import { useAuth } from '../AuthProvider';
 
-const ADMIN_EMAIL = 'mohamedsallu.sl@gmail.com';
+const ADMIN_EMAILS = ['mohamedsallu.sl@gmail.com', 'mohamedsallu24@gmail.com'];
+const ADMIN_DEFAULT_EMAIL = 'mohamedsallu24@gmail.com';
 const ADMIN_DEFAULT_PASSWORD = 'P@$$w0rd';
 
 export default function AdminDashboard() {
-  const [email, setEmail] = useState(ADMIN_EMAIL);
+  const [email, setEmail] = useState(ADMIN_DEFAULT_EMAIL);
   const [password, setPassword] = useState(ADMIN_DEFAULT_PASSWORD);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, title: '', message: '', variant: 'info' });
   const [fsStatus, setFsStatus] = useState('unknown');
+  const { user } = useAuth();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, user => {
-      if (user && user.email === ADMIN_EMAIL) {
-        setAuthorized(true);
-      } else {
-        setAuthorized(false);
-      }
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    if (user && ADMIN_EMAILS.includes(user.email)) setAuthorized(true); else setAuthorized(false);
+    setLoading(false);
+  }, [user]);
 
   // when authorized, try a small Firestore read to check connectivity/permissions
   useEffect(() => {
@@ -65,12 +61,13 @@ export default function AdminDashboard() {
     e.preventDefault();
     try {
       setLoading(true);
-      const cred = await loginWithEmail(email, password);
-      if (cred.user && cred.user.email === ADMIN_EMAIL) {
+      const res = await authSignIn(email, password);
+      if (res.error) throw res.error;
+      const cred = res.data?.user;
+      if (cred && ADMIN_EMAILS.includes(cred.email)) {
         setAuthorized(true);
-        setModal({ open: true, variant: 'success', title: 'Welcome', message: 'You are signed in as admin.' });
+        setModal({ open: true, variant: 'success', title: 'Welcome', message: `You are signed in as admin (${cred.email}).` });
       } else {
-        // signed in but not the admin account
         setModal({ open: true, variant: 'error', title: 'Access denied', message: 'This account is not permitted to access the admin dashboard.' });
       }
     } catch (err) {
@@ -83,7 +80,7 @@ export default function AdminDashboard() {
 
   async function handleLogout() {
     try {
-      await logout();
+      await authSignOut();
       setAuthorized(false);
       setModal({ open: true, variant: 'info', title: 'Signed out', message: 'You have been signed out.' });
     } catch (err) {
@@ -96,18 +93,19 @@ export default function AdminDashboard() {
 
   // helper to show actionable firestore rules guidance in the modal
   function showRulesGuide() {
+    const emails = ADMIN_EMAILS.map(e => `request.auth.token.email == '${e}'`).join(' || ');
     const rules = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read access to any document for the specific admin email only
+    // Allow read access to any document for admin emails only
     match /{document=**} {
-      allow read: if request.auth != null && request.auth.token.email == '${ADMIN_EMAIL}';
+      allow read: if request.auth != null && (${emails});
       // allow write can be restricted further — be careful granting write
       allow write: if false;
     }
   }
 }`;
-    setModal({ open: true, variant: 'info', title: 'Firestore rules to allow admin read', message: `If you want this admin user to read Firestore from the client, add the following to your Firestore rules and deploy them:\n\n${rules}\n\nDeploy with: firebase deploy --only firestore:rules` });
+    setModal({ open: true, variant: 'info', title: 'Firestore rules to allow admin read', message: `If you want these admin users to read Firestore from the client, add the following to your Firestore rules and deploy them:\n\n${rules}\n\nDeploy with: firebase deploy --only firestore:rules` });
   }
 
   if (loading) {
@@ -170,6 +168,14 @@ service cloud.firestore {
           <TermsManager />
         ) : view === 'vocabulary_categories' ? (
           <VocabularyCategoriesManager />
+        ) : view === 'photos' ? (
+          <PhotosManager />
+        ) : view === 'videos' ? (
+          <VideosManager />
+        ) : view === 'quizzes' ? (
+          <QuizzesManager />
+        ) : view === 'videos' ? (
+          <VideosManager />
         ) : (
           <>
             <FirestoreStatus db={db} />

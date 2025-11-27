@@ -2,15 +2,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default fallback: read allowed only for specific admin email, no writes.
+    // Default fallback: deny all writes, allow authenticated users to read (specific collections override this)
     match /{document=**} {
-      allow read: if request.auth != null && request.auth.token.email == 'mohamedsallu.sl@gmail.com';
+      allow read: if request.auth != null;
       allow write: if false;
     }
 
-    // Helper: check admin custom claim
+    // Helper: check admin
+    // Methods: custom claim (preferred), or explicit admin UIDs
+    // Get the current user's UID from console.log when signed in
     function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
+      return request.auth != null && (
+        // First priority: custom admin claim (set via Firebase Admin SDK)
+        request.auth.token.admin == true
+        // Second priority: explicit admin UIDs (add more UIDs as needed)
+        // mohamedsallu24@gmail.com
+        || request.auth.uid == 'lYVRBg9TPwTyjJEafMPpho0Zd0j2'
+        // Add more admin UIDs here as needed
+      );
     }
 
     // Validation for vocabulary category documents
@@ -22,7 +31,13 @@ service cloud.firestore {
         (
           !request.resource.data.keys().hasAny(['id']) ||
           (request.resource.data.id is string && request.resource.data.id.size() <= 100)
-        );
+        ) &&
+        // createdAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['createdAt']) ||
+          request.resource.data.createdAt is timestamp ) &&
+        // updatedAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['updatedAt']) ||
+          request.resource.data.updatedAt is timestamp );
     }
 
     // Validation for term documents (includes optional categoryId reference)
@@ -35,20 +50,78 @@ service cloud.firestore {
         request.resource.data.definition.size() > 0 &&
         request.resource.data.definition.size() <= 5000 &&
         request.resource.data.active is bool &&
-        (
-          !request.resource.data.keys().hasAny(['id']) ||
-          (request.resource.data.id is string && request.resource.data.id.size() <= 100)
-        ) &&
-        (
-          // categoryId may be missing, null, or empty string OR if provided must reference an existing category
-          !request.resource.data.keys().hasAny(['categoryId']) ||
+        // optional id field
+        ( !request.resource.data.keys().hasAny(['id']) ||
+          request.resource.data.id is string ) &&
+        // optional categoryId - just check it's a string if provided
+        ( !request.resource.data.keys().hasAny(['categoryId']) ||
           request.resource.data.categoryId == null ||
           request.resource.data.categoryId == '' ||
-          (
-            request.resource.data.categoryId is string &&
-            exists(/databases/$(database)/documents/vocabulary_categories/$(request.resource.data.categoryId))
-          )
-        );
+          request.resource.data.categoryId is string ) &&
+        // createdAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['createdAt']) ||
+          request.resource.data.createdAt is timestamp ) &&
+        // updatedAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['updatedAt']) ||
+          request.resource.data.updatedAt is timestamp );
+    }
+
+    // Validation for video documents (URL required)
+    function validVideoPayload() {
+      return
+        // required: url must be http/https
+        request.resource.data.url is string && request.resource.data.url.matches('^https?://') &&
+        // optional categoryId - just check it's a string if provided
+        ( !request.resource.data.keys().hasAny(['categoryId']) ||
+          request.resource.data.categoryId == null ||
+          request.resource.data.categoryId == '' ||
+          request.resource.data.categoryId is string ) &&
+        // optional photoIds - just check it's a list if provided
+        ( !request.resource.data.keys().hasAny(['photoIds']) ||
+          (request.resource.data.photoIds is list && request.resource.data.photoIds.size() <= 20) ) &&
+        // active flag - optional boolean
+        ( !request.resource.data.keys().hasAny(['active']) || request.resource.data.active is bool ) &&
+        // optional id field - just check it's a string if provided
+        ( !request.resource.data.keys().hasAny(['id']) ||
+          request.resource.data.id is string ) &&
+        // createdAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['createdAt']) ||
+          request.resource.data.createdAt is timestamp ) &&
+        // updatedAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['updatedAt']) ||
+          request.resource.data.updatedAt is timestamp );
+    }
+
+    // Validation for photo documents
+    function validPhotoPayload() {
+      return
+        request.resource.data.url is string && request.resource.data.url.matches('^https?://') &&
+        // categoryId is optional
+        ( !request.resource.data.keys().hasAny(['categoryId']) || 
+          request.resource.data.categoryId == null ||
+          request.resource.data.categoryId == '' ||
+          request.resource.data.categoryId is string ) &&
+        // termId is optional
+        ( !request.resource.data.keys().hasAny(['termId']) || 
+          request.resource.data.termId == null ||
+          request.resource.data.termId == '' ||
+          request.resource.data.termId is string ) &&
+        // videoUrl is optional
+        ( !request.resource.data.keys().hasAny(['videoUrl']) ||
+          request.resource.data.videoUrl == null ||
+          request.resource.data.videoUrl == '' ||
+          (request.resource.data.videoUrl is string && request.resource.data.videoUrl.matches('^https?://')) ) &&
+        // active is optional boolean
+        ( !request.resource.data.keys().hasAny(['active']) || request.resource.data.active is bool ) &&
+        // id is optional
+        ( !request.resource.data.keys().hasAny(['id']) ||
+          request.resource.data.id is string ) &&
+        // createdAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['createdAt']) ||
+          request.resource.data.createdAt is timestamp ) &&
+        // updatedAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['updatedAt']) ||
+          request.resource.data.updatedAt is timestamp );
     }
 
     // vocabulary_categories collection: only admins may read/write, with payload validation.
@@ -67,6 +140,74 @@ service cloud.firestore {
       allow create: if request.auth != null && isAdmin() && validTermPayload();
       allow update: if request.auth != null && isAdmin()
                     && validTermPayload()
+                    && ( !resource.data.keys().hasAny(['createdAt']) || resource.data.createdAt == request.resource.data.createdAt );
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // photos collection: reads allowed for authenticated users; write operations restricted to admins with payload validation
+    match /photos/{photoId} {
+      allow get, list: if request.auth != null;
+      allow create: if request.auth != null && isAdmin() && validPhotoPayload();
+      allow update: if request.auth != null && isAdmin()
+                    && validPhotoPayload()
+                    && ( !resource.data.keys().hasAny(['createdAt']) || resource.data.createdAt == request.resource.data.createdAt );
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // videos collection: admin-only CRUD with payload validation
+    match /videos/{videoId} {
+      allow get, list: if request.auth != null && isAdmin();
+      allow create: if request.auth != null && isAdmin() && validVideoPayload();
+      allow update: if request.auth != null && isAdmin()
+                    && validVideoPayload()
+                    && ( !resource.data.keys().hasAny(['createdAt']) || resource.data.createdAt == request.resource.data.createdAt );
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // Validation for quiz documents
+    function validQuizPayload() {
+      return
+        request.resource.data.question is string &&
+        request.resource.data.question.size() > 2 &&
+        request.resource.data.question.size() <= 1000 &&
+        // options: list of 2..6 objects with text and isCorrect
+        request.resource.data.options is list &&
+        request.resource.data.options.size() >= 2 && request.resource.data.options.size() <= 6 &&
+        // ensure at least one option is marked correct (check up to 6 slots)
+        (
+          (request.resource.data.options.size() > 0 && request.resource.data.options[0].isCorrect == true) ||
+          (request.resource.data.options.size() > 1 && request.resource.data.options[1].isCorrect == true) ||
+          (request.resource.data.options.size() > 2 && request.resource.data.options[2].isCorrect == true) ||
+          (request.resource.data.options.size() > 3 && request.resource.data.options[3].isCorrect == true) ||
+          (request.resource.data.options.size() > 4 && request.resource.data.options[4].isCorrect == true) ||
+          (request.resource.data.options.size() > 5 && request.resource.data.options[5].isCorrect == true)
+        ) &&
+        // optional categoryId - just check it's a string if provided
+        ( !request.resource.data.keys().hasAny(['categoryId']) ||
+          request.resource.data.categoryId == null ||
+          request.resource.data.categoryId == '' ||
+          request.resource.data.categoryId is string ) &&
+        // optional termId - just check it's a string if provided
+        ( !request.resource.data.keys().hasAny(['termId']) ||
+          request.resource.data.termId == null ||
+          request.resource.data.termId == '' ||
+          request.resource.data.termId is string ) &&
+        // active is optional boolean
+        ( !request.resource.data.keys().hasAny(['active']) || request.resource.data.active is bool ) &&
+        // createdAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['createdAt']) ||
+          request.resource.data.createdAt is timestamp ) &&
+        // updatedAt is optional timestamp (server-generated)
+        ( !request.resource.data.keys().hasAny(['updatedAt']) ||
+          request.resource.data.updatedAt is timestamp );
+    }
+
+    // quizzes collection: admin-only CRUD with payload validation
+    match /quizzes/{quizId} {
+      allow get, list: if request.auth != null && isAdmin();
+      allow create: if request.auth != null && isAdmin() && validQuizPayload();
+      allow update: if request.auth != null && isAdmin()
+                    && validQuizPayload()
                     && ( !resource.data.keys().hasAny(['createdAt']) || resource.data.createdAt == request.resource.data.createdAt );
       allow delete: if request.auth != null && isAdmin();
     }

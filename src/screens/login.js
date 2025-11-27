@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
-import { loginWithEmail, signInWithGoogle, auth } from '../firebase';
-import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
+import { authSignIn, authSignInWithProvider } from '../supabaseClient';
 
 export default function Login({ onBack }) {
   const [email, setEmail] = useState('');
@@ -12,32 +11,13 @@ export default function Login({ onBack }) {
   async function submit(e) {
     e.preventDefault();
     try {
-      // set persistence based on remember checkbox
-      try {
-        await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
-      } catch (persErr) {
-        console.warn('Persistence set failed', persErr);
-      }
-
-      const cred = await loginWithEmail(email, password);
-      console.log('Logged in:', cred.user);
+      const res = await authSignIn(email, password);
+      if (res.error) throw res.error;
+      console.log('Signed in:', res.data);
       setModal({ open: true, variant: 'success', title: 'Logged in', message: 'You have signed in successfully.' });
-      // redirect admin users to /admin
-      try {
-        if (cred && cred.user && cred.user.email === 'mohamedsallu.sl@gmail.com') {
-          window.location.pathname = '/admin';
-        }
-      } catch (e) { /* ignore */ }
-      // if this user is the admin, redirect to /admin
-      try {
-        const userEmail = cred?.user?.email;
-        if (userEmail && userEmail.toLowerCase() === 'mohamedsallu.sl@gmail.com') {
-          // short delay so modal shows briefly
-          setTimeout(() => { window.location.href = '/admin'; }, 600);
-        }
-      } catch (e) {
-        console.warn('Redirect check failed', e);
-      }
+      const userEmail = res?.data?.user?.email?.toLowerCase();
+      const adminEmail = 'mohamedsallu.sl@gmail.com';
+      setTimeout(() => { window.location.href = (userEmail === adminEmail ? '/admin' : '/'); }, 600);
     } catch (err) {
       console.error(err);
       setModal({ open: true, variant: 'error', title: 'Login failed', message: err.message || String(err) });
@@ -46,19 +26,10 @@ export default function Login({ onBack }) {
 
   async function google() {
     try {
-      try {
-        await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
-      } catch (persErr) {
-        console.warn('Persistence set failed', persErr);
-      }
-      const result = await signInWithGoogle();
-      console.log('Google sign-in result', result.user);
-      setModal({ open: true, variant: 'success', title: 'Signed in', message: 'Signed in with Google successfully.' });
-      try {
-        if (result && result.user && result.user.email === 'mohamedsallu.sl@gmail.com') {
-          window.location.pathname = '/admin';
-        }
-      } catch (e) { /* ignore */ }
+      const res = await authSignInWithProvider('google');
+      if (res.error) throw res.error;
+      // Supabase will redirect or return a url for OAuth flow depending on config.
+      setModal({ open: true, variant: 'info', title: 'Redirecting', message: 'Proceeding to Google sign-in...' });
     } catch (err) {
       console.error(err);
       setModal({ open: true, variant: 'error', title: 'Google sign-in failed', message: err.message || String(err) });
@@ -72,7 +43,7 @@ export default function Login({ onBack }) {
   }
 
   return (
-    <div className="auth-screen gradient-bg-full">
+    <div className="auth-screen" style={{ backgroundColor: '#fff', minHeight: '100vh', paddingTop: 28 }}>
       <div className="auth-card">
         <div className="auth-card-bar top" />
         <div className="auth-card-body">

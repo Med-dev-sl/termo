@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
-import { db } from '../firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
 
 export default function VocabularyCategoriesManager() {
   const [categories, setCategories] = useState([]);
@@ -17,10 +16,9 @@ export default function VocabularyCategoriesManager() {
   async function fetchCategories() {
     setLoading(true);
     try {
-      const q = query(collection(db, 'vocabulary_categories'), orderBy('name', 'asc'));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
-      setCategories(data);
+      const res = await supabase.from('vocabulary_categories').select('*').order('name', { ascending: true });
+      if (res.error) throw res.error;
+      setCategories((res.data || []).map(d => ({ ...d, docId: d.id })));
     } catch (err) {
       console.error('Fetch categories error', err);
       setModal({ open: true, variant: 'error', title: 'Fetch error', message: `Failed to load categories: ${err.message}` });
@@ -34,27 +32,41 @@ export default function VocabularyCategoriesManager() {
   async function handleSave() {
     if (!formData.name.trim()) { setModal({ open: true, variant: 'error', title: 'Validation', message: 'Name is required' }); return; }
     try {
+      const payload = {
+        id: formData.id || undefined,
+        name: formData.name.trim(),
+      };
+      let res;
       if (formModal.mode === 'add') {
-        await addDoc(collection(db, 'vocabulary_categories'), { id: formData.id || undefined, name: formData.name.trim(), createdAt: new Date() });
+        payload.createdAt = new Date().toISOString();
+        res = await supabase.from('vocabulary_categories').insert([payload]);
+        if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Added', message: 'Category created' });
       } else {
-        const docRef = doc(db, 'vocabulary_categories', formModal.category.docId);
-        await updateDoc(docRef, { id: formData.id || undefined, name: formData.name.trim(), updatedAt: new Date() });
+        payload.updatedAt = new Date().toISOString();
+        res = await supabase.from('vocabulary_categories').update(payload).eq('id', formData.id);
+        if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Updated', message: 'Category updated' });
       }
       closeForm();
       fetchCategories();
-    } catch (err) { console.error('Save category error', err); setModal({ open: true, variant: 'error', title: 'Save error', message: err.message }); }
+    } catch (err) {
+      console.error('Save category error', err);
+      setModal({ open: true, variant: 'error', title: 'Save error', message: err.message });
+    }
   }
 
   async function handleDelete(cat) {
     try {
-      const docRef = doc(db, 'vocabulary_categories', cat.docId);
-      await deleteDoc(docRef);
+      const res = await supabase.from('vocabulary_categories').delete().eq('id', cat.id);
+      if (res.error) throw res.error;
       setDeleteConfirm(null);
       setModal({ open: true, variant: 'success', title: 'Deleted', message: 'Category deleted' });
       fetchCategories();
-    } catch (err) { console.error('Delete category error', err); setModal({ open: true, variant: 'error', title: 'Delete error', message: err.message }); }
+    } catch (err) {
+      console.error('Delete category error', err);
+      setModal({ open: true, variant: 'error', title: 'Delete error', message: err.message });
+    }
   }
 
   if (loading) return <div style={{ padding: '1rem' }}>Loading categories...</div>;

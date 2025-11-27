@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
-import { db } from '../firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
 
 // Note: Terms now reference categories by categoryId. We fetch categories to show in the
 // term form as a dropdown and display the category name in the list.
@@ -24,13 +23,11 @@ export default function TermsManager() {
 
   async function fetchCategories() {
     try {
-      const q = query(collection(db, 'vocabulary_categories'), orderBy('name', 'asc'));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
-      setCategories(data);
+      const res = await supabase.from('vocabulary_categories').select('*').order('name', { ascending: true });
+      if (res.error) throw res.error;
+      setCategories((res.data || []).map(d => ({ ...d, docId: d.id })));
     } catch (err) {
       console.error('Fetch categories error', err);
-      // categories are optional for terms display; show a non-blocking modal
       setModal({ open: true, variant: 'error', title: 'Categories error', message: `Failed to load categories: ${err.message}` });
     }
   }
@@ -38,10 +35,9 @@ export default function TermsManager() {
   async function fetchTerms() {
     setLoading(true);
     try {
-      const q = query(collection(db, 'terms'), orderBy('name', 'asc'));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
-      setTerms(data);
+      const res = await supabase.from('terms').select('*').order('name', { ascending: true });
+      if (res.error) throw res.error;
+      setTerms((res.data || []).map(d => ({ ...d, docId: d.id })));
     } catch (err) {
       console.error('Fetch terms error', err);
       setModal({ open: true, variant: 'error', title: 'Fetch error', message: `Failed to load terms: ${err.message}` });
@@ -71,28 +67,23 @@ export default function TermsManager() {
       return;
     }
     try {
+      const payload = {
+        id: formData.id || undefined,
+        name: formData.name.trim(),
+        definition: formData.definition.trim(),
+        active: formData.active,
+        categoryId: formData.categoryId || null,
+      };
+      let res;
       if (formModal.mode === 'add') {
-        // Create new term
-        await addDoc(collection(db, 'terms'), {
-          id: formData.id || undefined,
-          name: formData.name.trim(),
-          definition: formData.definition.trim(),
-          active: formData.active,
-          categoryId: formData.categoryId || null,
-          createdAt: new Date(),
-        });
+        payload.createdAt = new Date().toISOString();
+        res = await supabase.from('terms').insert([payload]);
+        if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Term added', message: 'Term has been created successfully.' });
       } else {
-        // Update existing term
-        const docRef = doc(db, 'terms', formModal.term.docId);
-        await updateDoc(docRef, {
-          id: formData.id || undefined,
-          name: formData.name.trim(),
-          definition: formData.definition.trim(),
-          active: formData.active,
-          categoryId: formData.categoryId || null,
-          updatedAt: new Date(),
-        });
+        payload.updatedAt = new Date().toISOString();
+        res = await supabase.from('terms').update(payload).eq('id', formData.id);
+        if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Term updated', message: 'Term has been updated successfully.' });
       }
       closeFormModal();
@@ -105,8 +96,8 @@ export default function TermsManager() {
 
   async function handleToggleStatus(term) {
     try {
-      const docRef = doc(db, 'terms', term.docId);
-      await updateDoc(docRef, { active: !term.active });
+      const res = await supabase.from('terms').update({ active: !term.active, updatedAt: new Date().toISOString() }).eq('id', term.id);
+      if (res.error) throw res.error;
       setModal({ open: true, variant: 'success', title: 'Status updated', message: `Term is now ${!term.active ? 'active' : 'inactive'}.` });
       fetchTerms();
     } catch (err) {
@@ -117,8 +108,8 @@ export default function TermsManager() {
 
   async function handleDelete(term) {
     try {
-      const docRef = doc(db, 'terms', term.docId);
-      await deleteDoc(docRef);
+      const res = await supabase.from('terms').delete().eq('id', term.id);
+      if (res.error) throw res.error;
       setDeleteConfirm(null);
       setModal({ open: true, variant: 'success', title: 'Term deleted', message: 'Term has been deleted.' });
       fetchTerms();
