@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { t, localize, getLang } from '../i18n';
 
 export default function CategoryTerms({ categoryId: propCategoryId }) {
   const [terms, setTerms] = useState([]);
@@ -110,54 +111,86 @@ export default function CategoryTerms({ categoryId: propCategoryId }) {
     return (<a href={url} target="_blank" rel="noopener noreferrer">Open video</a>);
   }
 
+  function speakText(text) {
+    if (!text) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      // stop any existing speech
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+    const utter = new SpeechSynthesisUtterance(String(text));
+    const lang = getLang();
+    utter.lang = lang === 'ru' ? 'ru-RU' : 'en-US';
+    try {
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      console.warn('Speech synthesis failed', e);
+    }
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <button className="btn" onClick={goBack}>← Back</button>
-        <h2 style={{ margin: 0 }}>{category ? category.name : 'Category'}</h2>
+        <button className="btn" onClick={goBack} aria-label={t('back')} title={t('back')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '8px', color: '#0f172a' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+            <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <h2 style={{ margin: 0 }}>{category ? category.name : t('vocabularyCategories')}</h2>
       </div>
 
       {loading ? (
-        <div>Loading terms…</div>
+        <div>{t('loadingTerms')}</div>
       ) : (
         <div>
           {terms.length === 0 ? (
-            <div style={{ color: '#64748b' }}>No terms found for this category.</div>
+            <div style={{ color: '#64748b' }}>{t('noTermsForCategory')}</div>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {terms.map(t => (
-                <li key={t.id} style={{ padding: 12, borderRadius: 8, background: '#fff', marginBottom: 8, boxShadow: '0 1px 2px rgba(2,6,23,0.06)' }}>
+              {terms.map(term => (
+                <li key={term.id} style={{ padding: 12, borderRadius: 8, background: '#fff', marginBottom: 8, boxShadow: '0 1px 2px rgba(2,6,23,0.06)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontWeight: 700 }}>{t.name}</div>
-                      {t.definition ? <div style={{ color: '#475569' }}>{t.definition}</div> : null}
+                      <div style={{ fontWeight: 700 }}>{localize(term, 'name')}</div>
+                      {localize(term, 'definition') ? (
+                        <div style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1 }}>{localize(term, 'definition')}</div>
+                          <button className="btn" onClick={() => speakText(localize(term, 'definition'))} title={t('readAloud')} aria-label={t('readAloud')} style={{ padding: 6, minWidth: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#0f172a' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                              <path d="M11 5L6 9H3v6h3l5 4V5z" fill="currentColor" />
+                              <path d="M16.5 12c0-1.77-.77-3.37-2-4.47v8.94c1.23-1.1 2-2.7 2-4.47z" fill="currentColor" />
+                            </svg>
+                            <span style={{ display: 'none' }}>{t('readAloud')}</span>
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                     <div>
-                      <button className="btn" onClick={() => setOpenTermId(openTermId === t.id ? null : t.id)}>{openTermId === t.id ? 'Hide' : 'Show'}</button>
+                      <button className="btn" onClick={() => setOpenTermId(openTermId === term.id ? null : term.id)}>{openTermId === term.id ? t('hide') : t('show')}</button>
                     </div>
                   </div>
 
-                  {openTermId === t.id && (
+                  {openTermId === term.id && (
                     <div style={{ marginTop: 12 }}>
-                      <div style={{ marginBottom: 8 }}><strong>Photos</strong></div>
+                      <div style={{ marginBottom: 8 }}><strong>{t('photos')}</strong></div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
-                        {(photosByTerm[t.id] || []).length === 0 ? (
-                          <div style={{ color: '#64748b' }}>No photos for this term.</div>
+                        {(photosByTerm[term.id] || []).length === 0 ? (
+                          <div style={{ color: '#64748b' }}>{t('noTermsForCategory')}</div>
                         ) : (
-                          (photosByTerm[t.id] || []).map(p => (
+                          (photosByTerm[term.id] || []).map(p => (
                             <div key={p.id || p.docId} style={{ width: '100%' }}>
-                              <img src={p.url} alt={t.name} loading="lazy" style={{ width: '100%', height: 'auto', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                              <img src={p.url} alt={localize(term, 'name')} loading="lazy" style={{ width: '100%', height: 'auto', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                             </div>
                           ))
                         )}
                       </div>
 
-                      <div style={{ marginBottom: 8 }}><strong>Videos</strong></div>
+                      <div style={{ marginBottom: 8 }}><strong>{t('videos')}</strong></div>
                       <div style={{ display: 'flex', gap: 12, flexDirection: 'column' }}>
-                        {(videosByTerm[t.id] || []).length === 0 ? (
-                          <div style={{ color: '#64748b' }}>No videos for this term.</div>
+                        {(videosByTerm[term.id] || []).length === 0 ? (
+                          <div style={{ color: '#64748b' }}>{t('noTermsForCategory')}</div>
                         ) : (
-                          (videosByTerm[t.id] || []).map(v => (
+                          (videosByTerm[term.id] || []).map(v => (
                             <div key={v.id || v.docId} style={{ width: '100%' }}>
                               {renderVideoEmbed(v.url)}
                             </div>

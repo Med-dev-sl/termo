@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import SearchBar from '../components/SearchBar';
 import ProfileBadge from '../components/ProfileBadge';
+import { t, localize } from '../i18n';
 import { getAllCategories } from '../admin/VocabularyCategoriesManager';
 import { supabase } from '../supabaseClient';
 
@@ -78,28 +79,28 @@ export default function Home() {
       </div>
 
       <div style={{ maxWidth: 1200, margin: '18px auto 0', padding: '0 16px' }}>
-        <h2 style={{ margin: '8px 0 16px', color: '#0f172a' }}>Vocabulary Categories</h2>
+        <h2 style={{ margin: '8px 0 16px', color: '#0f172a' }}>{t('vocabularyCategories')}</h2>
 
         {loading ? (
           <div style={{ color: '#475569' }}>Loading categories…</div>
         ) : (
           <div>
-            <div style={{ marginBottom: 12, color: '#334155' }}>
-              <strong>Search:</strong> "{searchQuery || 'all'}"
-              <button onClick={() => { setSearchQuery(''); }} style={{ marginLeft: 12 }} className="btn">Clear</button>
-            </div>
+              <div style={{ marginBottom: 12, color: '#334155' }}>
+                <strong>{t('searchLabel')}:</strong> "{searchQuery || 'all'}"
+                <button onClick={() => { setSearchQuery(''); }} style={{ marginLeft: 12 }} className="btn">{t('clear')}</button>
+              </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
               {(categories || []).filter(cat => {
                 if (!searchQuery) return true;
-                return String(cat.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+                return String(localize(cat, 'name') || '').toLowerCase().includes(searchQuery.toLowerCase());
               }).map((c) => (
                 <div key={c.id} onClick={() => { window.location.pathname = `/categories/${encodeURIComponent(c.id)}`; }} style={{ background: '#0b3d91', color: '#fff', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 12, minHeight: 84, cursor: 'pointer' }}>
                   <div style={{ flexShrink: 0 }}>
-                    {renderIcon(c.name)}
+                    {renderIcon(localize(c, 'name'))}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ fontSize: 16, fontWeight: 600 }}>{c.name}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>{localize(c, 'name')}</div>
                   </div>
                 </div>
               ))}
