@@ -88,14 +88,14 @@ export default function Home() {
   return (
     <div className={`page-root ${theme} home`} style={{ minHeight: '100vh', minWidth: '100%', position: 'relative', paddingBottom: 32 }}>
       <div style={{ position: 'relative', paddingTop: 24, paddingBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <SearchBar onChange={setSearchQuery} onSearch={q => setSearchQuery(q)} />
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <button className="control-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">{theme === 'dark' ? '🌞' : '🌙'}</button>
+          </div>
         </div>
         <div style={{ position: 'absolute', right: 12, top: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div className="controls">
-            <button className="control-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">{theme === 'dark' ? '🌞' : '🌙'}</button>
-            <ProfileBadge />
-          </div>
+          <ProfileBadge />
         </div>
       </div>
 
