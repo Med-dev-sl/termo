@@ -7,6 +7,20 @@ import { getAllCategories } from '../admin/VocabularyCategoriesManager';
 import { supabase } from '../supabaseClient';
 
 export default function Home() {
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('theme') === 'dark' ? 'dark' : 'light'; } catch (e) { return 'light'; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('theme', theme); } catch (e) {}
+    // apply class to root container
+    const root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,17 +86,24 @@ export default function Home() {
   };
 
   return (
-    <div style={{ background: '#ffffff', minHeight: '100vh', minWidth: '100%', position: 'relative', paddingBottom: 32 }}>
+    <div className={`page-root ${theme} home`} style={{ minHeight: '100vh', minWidth: '100%', position: 'relative', paddingBottom: 32 }}>
       <div style={{ position: 'relative', paddingTop: 24, paddingBottom: 12 }}>
-        <SearchBar onChange={setSearchQuery} onSearch={q => setSearchQuery(q)} />
-        <ProfileBadge />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <SearchBar onChange={setSearchQuery} onSearch={q => setSearchQuery(q)} />
+        </div>
+        <div style={{ position: 'absolute', right: 12, top: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="controls">
+            <button className="control-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">{theme === 'dark' ? '🌞' : '🌙'}</button>
+            <ProfileBadge />
+          </div>
+        </div>
       </div>
 
       <div style={{ maxWidth: 1200, margin: '18px auto 0', padding: '0 16px' }}>
         <h2 style={{ margin: '8px 0 16px', color: '#0f172a' }}>{t('vocabularyCategories')}</h2>
 
         {loading ? (
-          <div style={{ color: '#475569' }}>Loading categories…</div>
+          <div style={{ color: 'var(--muted)' }}>{t('loadingCategories')}</div>
         ) : (
           <div>
               <div style={{ marginBottom: 12, color: '#334155' }}>

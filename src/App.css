@@ -307,3 +307,36 @@ body { overflow-x: hidden; }
 .btn-small.delete:hover { background: #c82333; }
 textarea { padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
 
+/* Theme helpers for light/dark mode used by pages */
+.light {
+  --bg: #ffffff;
+  --panel-bg: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --card-shadow: 0 1px 2px rgba(2,6,23,0.06);
+}
+.dark {
+  --bg: #0b1220;
+  --panel-bg: #071025;
+  --text: #e6eef8;
+  --muted: #9fb6d6;
+  --card-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+
+/* Page containers apply background and text using variables */
+.page-root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Ensure buttons using currentColor adapt to theme */
+.page-root .btn { color: var(--text); }
+
+/* Make sure SVGs that use currentColor are visible */
+.page-root svg { color: var(--text); }
+
+/* Small control styles for zoom/theme controls */
+.controls { display:flex; gap:8px; align-items:center; }
+.control-btn { padding:6px 8px; border-radius:8px; border:none; background:transparent; cursor:pointer; color:var(--text); }
+.control-btn:active { transform:translateY(1px); }
+

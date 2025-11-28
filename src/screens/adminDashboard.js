@@ -169,6 +169,8 @@ export default function AdminDashboard() {
           <UsersManager />
         ) : view === 'videos' ? (
           <VideosManager />
+        ) : view === 'photos' ? (
+          <PhotosManager />
         ) : view === 'quizzes' ? (
           <QuizzesManager />
         ) : (

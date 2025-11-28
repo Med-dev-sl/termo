@@ -3,6 +3,28 @@ import { supabase } from '../supabaseClient';
 import { t, localize, getLang } from '../i18n';
 
 export default function CategoryTerms({ categoryId: propCategoryId }) {
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('theme') === 'dark' ? 'dark' : 'light'; } catch (e) { return 'light'; }
+  });
+  const [scale, setScale] = useState(() => {
+    try { return Number(localStorage.getItem('contentScale')) || 1; } catch (e) { return 1; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('theme', theme); } catch (e) {}
+    const root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    try { localStorage.setItem('contentScale', String(scale)); } catch (e) {}
+  }, [scale]);
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  const zoomIn = () => setScale(s => Math.min(1.6, Math.round((s + 0.1) * 10) / 10));
+  const zoomOut = () => setScale(s => Math.max(0.8, Math.round((s - 0.1) * 10) / 10));
+  const resetZoom = () => setScale(1);
   const [terms, setTerms] = useState([]);
   const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -129,14 +151,22 @@ export default function CategoryTerms({ categoryId: propCategoryId }) {
   }
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className={`page-root ${theme} category-terms`} style={{ padding: 20, fontSize: `${Math.round(16 * scale)}px` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <button className="btn" onClick={goBack} aria-label={t('back')} title={t('back')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '8px', color: '#0f172a' }}>
+        <button className="btn" onClick={goBack} aria-label={t('back')} title={t('back')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '8px', color: 'var(--text)' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
             <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <h2 style={{ margin: 0 }}>{category ? category.name : t('vocabularyCategories')}</h2>
+        <h2 style={{ margin: 0 }}>{category ? localize(category, 'name') || category.name : t('vocabularyCategories')}</h2>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="controls" style={{ alignItems: 'center' }}>
+            <button className="control-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Light' : 'Dark'} aria-label="Toggle theme">{theme === 'dark' ? '🌞' : '🌙'}</button>
+            <button className="control-btn" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">A-</button>
+            <button className="control-btn" onClick={resetZoom} title="Reset zoom" aria-label="Reset zoom">A</button>
+            <button className="control-btn" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">A+</button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
