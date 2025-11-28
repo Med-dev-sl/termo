@@ -62,8 +62,8 @@ export default function TermsManager() {
   }
 
   async function handleSave() {
-    if (!formData.name.trim() || !formData.definition.trim()) {
-      setModal({ open: true, variant: 'error', title: 'Validation error', message: 'Name and definition are required.' });
+    if (!formData.id.trim() || !formData.name.trim() || !formData.definition.trim()) {
+      setModal({ open: true, variant: 'error', title: 'Validation error', message: 'ID, Name, and Definition are required.' });
       return;
     }
     try {
@@ -147,6 +147,8 @@ export default function TermsManager() {
               <th>Category</th>
               <th>Definition</th>
               <th>Status</th>
+              <th>Created At</th>
+              <th>Updated At</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -162,6 +164,8 @@ export default function TermsManager() {
                     {term.active ? 'Active' : 'Inactive'}
                   </span>
                 </td>
+                <td>{term.createdAt ? new Date(term.createdAt).toLocaleString() : '-'}</td>
+                <td>{term.updatedAt ? new Date(term.updatedAt).toLocaleString() : '-'}</td>
                 <td>
                   <button className="btn-small" onClick={() => openEditForm(term)}>Edit</button>
                   <button className="btn-small" onClick={() => handleToggleStatus(term)}>
@@ -184,8 +188,8 @@ export default function TermsManager() {
             </header>
             <div className="modal-body">
               <label className="field">
-                <span>ID (optional)</span>
-                <input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} placeholder="e.g., term_001" />
+                <span>ID *</span>
+                <input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} placeholder="e.g., term_001" required />
               </label>
               <label className="field">
                 <span>Name *</span>

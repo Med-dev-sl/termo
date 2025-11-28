@@ -6,13 +6,12 @@ import { supabase } from '../supabaseClient';
 export default function QuizzesManager() {
   const [quizzes, setQuizzes] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [terms, setTerms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, title: '', message: '', variant: 'info' });
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState('add');
   const [editing, setEditing] = useState(null);
-  const blankForm = { id: '', categoryId: '', termId: '', question: '', options: [{ text: '', isCorrect: false }, { text: '', isCorrect: false }], active: true };
+  const blankForm = { id: '', categoryId: '', question: '', options: [{ text: '', isCorrect: false }, { text: '', isCorrect: false }], active: true };
   const [form, setForm] = useState(blankForm);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
@@ -21,14 +20,12 @@ export default function QuizzesManager() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [qRes, cRes, tRes] = await Promise.all([
+      const [qRes, cRes] = await Promise.all([
         supabase.from('quizzes').select('*').order('createdAt', { ascending: false }),
         supabase.from('vocabulary_categories').select('*').order('name', { ascending: true }),
-        supabase.from('terms').select('*').order('name', { ascending: true }),
       ]);
       setQuizzes((qRes.data || []).map(d => ({ ...d, docId: d.id })));
       setCategories((cRes.data || []).map(d => ({ ...d, docId: d.id })));
-      setTerms((tRes.data || []).map(d => ({ ...d, docId: d.id })));
     } catch (err) {
       console.error('Fetch quizzes error', err);
       setModal({ open: true, variant: 'error', title: 'Fetch error', message: String(err) });
@@ -36,7 +33,7 @@ export default function QuizzesManager() {
   }
 
   function openAdd() { setForm(blankForm); setFormMode('add'); setEditing(null); setFormOpen(true); }
-  function openEdit(q) { setForm({ id: q.id || '', categoryId: q.categoryId || '', termId: q.termId || '', question: q.question || '', options: q.options || [{ text:'', isCorrect:false }], active: !!q.active }); setEditing(q); setFormMode('edit'); setFormOpen(true); }
+  function openEdit(q) { setForm({ id: q.id || '', categoryId: q.categoryId || '', question: q.question || '', options: q.options || [{ text:'', isCorrect:false }], active: !!q.active }); setEditing(q); setFormMode('edit'); setFormOpen(true); }
   function closeForm() { setForm(blankForm); setFormOpen(false); setEditing(null); }
 
   function addOption() { if (form.options.length >= 6) return; setForm({ ...form, options: [...form.options, { text: '', isCorrect: false }] }); }
@@ -57,9 +54,7 @@ export default function QuizzesManager() {
     if (!validate()) return;
     try {
       const payload = {
-        id: form.id || undefined,
         categoryId: form.categoryId || '',
-        termId: form.termId || '',
         question: form.question.trim(),
         options: form.options.map(o => ({ text: o.text.trim(), isCorrect: !!o.isCorrect })),
         active: !!form.active,
@@ -97,7 +92,7 @@ export default function QuizzesManager() {
     }
   }
 
-  const filteredTerms = form.categoryId ? terms.filter(t => t.categoryId === form.categoryId) : terms;
+  // terms removed: quizzes are added by category only
 
   if (loading) return <div style={{ padding: '1rem' }}>Loading quizzes...</div>;
 
@@ -115,11 +110,11 @@ export default function QuizzesManager() {
       ) : (
         <table className="admin-table">
           <thead>
-            <tr><th>ID</th><th>Question</th><th>Category</th><th>Term</th><th>Options</th><th>Active</th><th>Actions</th></tr>
+            <tr><th>ID</th><th>Question</th><th>Category</th><th>Options</th><th>Active</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {quizzes.map(q => (
-              <tr key={q.docId}><td>{q.id || '-'}</td><td style={{ maxWidth: 300 }}>{q.question}</td><td>{(categories.find(c => c.docId === q.categoryId) || {}).name || '-'}</td><td>{(terms.find(t => t.docId === q.termId) || {}).name || '-'}</td><td>{(q.options || []).length}</td><td>{q.active ? 'Yes' : 'No'}</td><td>
+              <tr key={q.docId}><td>{q.id || '-'}</td><td style={{ maxWidth: 300 }}>{q.question}</td><td>{(categories.find(c => c.docId === q.categoryId) || {}).name || '-'}</td><td>{(q.options || []).length}</td><td>{q.active ? 'Yes' : 'No'}</td><td>
                 <button className="btn-small" onClick={() => openEdit(q)}>Edit</button>
                 <button className="btn-small delete" onClick={() => setDeleteConfirm(q)}>Delete</button>
               </td></tr>
@@ -133,17 +128,13 @@ export default function QuizzesManager() {
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <header className="modal-header"><h3>{formMode === 'add' ? 'Add Quiz' : 'Edit Quiz'}</h3></header>
             <div className="modal-body">
-              <label className="field"><span>ID (optional)</span><input type="text" value={form.id} onChange={e => setForm({ ...form, id: e.target.value })} /></label>
+              {formMode === 'edit' && (
+                <label className="field"><span>ID</span><input type="text" value={form.id} onChange={e => setForm({ ...form, id: e.target.value })} readOnly /></label>
+              )}
               <label className="field"><span>Category</span>
-                <select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value, termId: '' })}>
+                <select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })}>
                   <option value="">-- none --</option>
                   {categories.map(c => <option key={c.docId} value={c.docId}>{c.name}</option>)}
-                </select>
-              </label>
-              <label className="field"><span>Term (optional)</span>
-                <select value={form.termId} onChange={e => setForm({ ...form, termId: e.target.value })}>
-                  <option value="">-- none --</option>
-                  {filteredTerms.map(t => <option key={t.docId} value={t.docId}>{t.name}</option>)}
                 </select>
               </label>
               <label className="field"><span>Question *</span><input type="text" value={form.question} onChange={e => setForm({ ...form, question: e.target.value })} required /></label>

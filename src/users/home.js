@@ -1,81 +1,113 @@
 
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../AuthProvider';
-import { authSignOut } from '../supabaseClient';
+import SearchBar from '../components/SearchBar';
+import ProfileBadge from '../components/ProfileBadge';
+import { getAllCategories } from '../admin/VocabularyCategoriesManager';
+import { supabase } from '../supabaseClient';
 
-function Home() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
+export default function Home() {
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const handleLogout = async () => {
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data = await getAllCategories();
+        if (mounted) setCategories(data || []);
+      } catch (err) {
+        console.error('Failed to load categories', err.message || err);
+        if (mounted) setCategories([]);
+        if (mounted) setError(err.message || String(err));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  const [error, setError] = useState('');
+
+  const reload = async () => {
+    setLoading(true);
+    setError('');
     try {
-      await authSignOut();
-      navigate('/login');
+      // Try the shared loader first
+      const data = await getAllCategories();
+      if (Array.isArray(data) && data.length) {
+        setCategories(data);
+        return;
+      }
+      // Fallback: direct select * (helps if column names differ)
+      const res = await supabase.from('vocabulary_categories').select('*').order('name', { ascending: true });
+      if (res.error) throw res.error;
+      setCategories(res.data || []);
     } catch (err) {
-      console.error('Logout failed', err);
+      console.error('Reload failed', err);
+      setError(err.message || String(err));
+      setCategories([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-		const displayName = (user && ((user.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) || user.email)) || 'Guest';
+  const renderIcon = (name, icon) => {
+    if (icon) {
+      return <img src={icon} alt="icon" style={{ width: 28, height: 28, objectFit: 'contain' }} />;
+    }
+    if (String(name).toLowerCase().includes('electric')) {
+      return (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+          <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" fill="#fff" />
+        </svg>
+      );
+    }
+    return (
+      <div style={{ width: 28, height: 28, borderRadius: 14, background: 'rgba(255,255,255,0.2)' }} />
+    );
+  };
 
-	return (
-		<div className="user-home" style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
-			<header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-				<div>
-					<h1 style={{ margin: 0 }}>Welcome to Termo</h1>
-					<p style={{ margin: '4px 0 0', color: '#555' }}>A quick way to browse and learn terms.</p>
-				</div>
-				<div style={{ textAlign: 'right' }}>
-					<div style={{ fontWeight: 600 }}>{displayName}</div>
-					<button onClick={handleLogout} style={{ marginTop: 8 }} aria-label="Sign out">Sign out</button>
-				</div>
-			</header>
+  return (
+    <div style={{ background: '#ffffff', minHeight: '100vh', minWidth: '100%', position: 'relative', paddingBottom: 32 }}>
+      <div style={{ position: 'relative', paddingTop: 24, paddingBottom: 12 }}>
+        <SearchBar onChange={setSearchQuery} onSearch={q => setSearchQuery(q)} />
+        <ProfileBadge />
+      </div>
 
-			<main style={{ marginTop: 24 }}>
-				<section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-					<Link to="/vocabulary" style={cardStyle} aria-label="Browse vocabulary">
-						<h3>Browse Vocabulary</h3>
-						<p>Explore terms and their definitions.</p>
-					</Link>
+      <div style={{ maxWidth: 1200, margin: '18px auto 0', padding: '0 16px' }}>
+        <h2 style={{ margin: '8px 0 16px', color: '#0f172a' }}>Vocabulary Categories</h2>
 
-					<Link to="/categories" style={cardStyle} aria-label="Categories">
-						<h3>Categories</h3>
-						<p>Find terms grouped by subject.</p>
-					</Link>
+        {loading ? (
+          <div style={{ color: '#475569' }}>Loading categories…</div>
+        ) : (
+          <div>
+            <div style={{ marginBottom: 12, color: '#334155' }}>
+              <strong>Search:</strong> "{searchQuery || 'all'}"
+              <button onClick={() => { setSearchQuery(''); }} style={{ marginLeft: 12 }} className="btn">Clear</button>
+            </div>
 
-					<Link to="/learn" style={cardStyle} aria-label="Learn">
-						<h3>Learn</h3>
-						<p>Practice with quizzes and examples.</p>
-					</Link>
-
-					<Link to="/profile" style={cardStyle} aria-label="Profile">
-						<h3>Profile</h3>
-						<p>View and edit your account details.</p>
-					</Link>
-				</section>
-
-				<section style={{ marginTop: 28 }}>
-					<h2>Quick actions</h2>
-					<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-						<Link to="/vocabulary/new" style={{ padding: '8px 12px', background: '#1976d2', color: '#fff', borderRadius: 4, textDecoration: 'none' }}>Add new term</Link>
-						<Link to="/search" style={{ padding: '8px 12px', background: '#eee', color: '#111', borderRadius: 4, textDecoration: 'none' }}>Search</Link>
-					</div>
-				</section>
-			</main>
-		</div>
-	);
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+              {(categories || []).filter(cat => {
+                if (!searchQuery) return true;
+                return String(cat.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+              }).map((c) => (
+                <div key={c.id} onClick={() => { window.location.pathname = `/categories/${encodeURIComponent(c.id)}`; }} style={{ background: '#0b3d91', color: '#fff', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 12, minHeight: 84, cursor: 'pointer' }}>
+                  <div style={{ flexShrink: 0 }}>
+                    {renderIcon(c.name)}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>{c.name}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
-
-const cardStyle = {
-	display: 'block',
-	padding: 16,
-	borderRadius: 8,
-	background: '#fafafa',
-	border: '1px solid #eee',
-	textDecoration: 'none',
-	color: 'inherit',
-};
-
-export default Home;
 

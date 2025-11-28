@@ -7,6 +7,7 @@ import VocabularyCategoriesManager from '../admin/VocabularyCategoriesManager';
 import PhotosManager from '../admin/PhotosManager';
 import VideosManager from '../admin/VideosManager';
 import QuizzesManager from '../admin/QuizzesManager';
+import UsersManager from '../admin/UsersManager';
 import { supabase, authSignIn, authSignOut } from '../supabaseClient';
 import { useAuth } from '../AuthProvider';
 
@@ -20,42 +21,23 @@ export default function AdminDashboard() {
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, title: '', message: '', variant: 'info' });
-  const [fsStatus, setFsStatus] = useState('unknown');
   const { user } = useAuth();
+  const [stats, setStats] = useState({ videos: 0, photos: 0, terms: 0, categories: 0 });
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   useEffect(() => {
     if (user && ADMIN_EMAILS.includes(user.email)) setAuthorized(true); else setAuthorized(false);
     setLoading(false);
   }, [user]);
 
-  // when authorized, try a small Firestore read to check connectivity/permissions
   useEffect(() => {
-    let mounted = true;
-    async function checkFirestore() {
-      if (!authorized) return;
-      setFsStatus('checking');
-      try {
-        // attempt to read a small doc — adjust collection/doc to something that exists or is OK to read
-        const d = doc(db, 'meta', 'status');
-        const snap = await getDoc(d);
-        if (!mounted) return;
-        if (snap.exists()) {
-          setFsStatus('ok');
-        } else {
-          // doc missing is still success — Firestore responded
-          setFsStatus('ok');
-        }
-      } catch (err) {
-        console.error('Firestore check failed', err);
-        if (!mounted) return;
-        // show actionable modal for permission error
-        setFsStatus('error');
-        setModal({ open: true, variant: 'error', title: 'Firestore access error', message: `Firestore read failed: ${err.message || err}.\nThis usually means your Firestore security rules prevent reads for this user. See the console for details.` });
-      }
+    if (authorized) {
+      fetchStatsAndLogs();
     }
-    checkFirestore();
-    return () => { mounted = false; };
   }, [authorized]);
+
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -92,21 +74,6 @@ export default function AdminDashboard() {
   function closeModal() { setModal(m => ({ ...m, open: false })); }
 
   // helper to show actionable firestore rules guidance in the modal
-  function showRulesGuide() {
-    const emails = ADMIN_EMAILS.map(e => `request.auth.token.email == '${e}'`).join(' || ');
-    const rules = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Allow read access to any document for admin emails only
-    match /{document=**} {
-      allow read: if request.auth != null && (${emails});
-      // allow write can be restricted further — be careful granting write
-      allow write: if false;
-    }
-  }
-}`;
-    setModal({ open: true, variant: 'info', title: 'Firestore rules to allow admin read', message: `If you want these admin users to read Firestore from the client, add the following to your Firestore rules and deploy them:\n\n${rules}\n\nDeploy with: firebase deploy --only firestore:rules` });
-  }
 
   if (loading) {
     return (
@@ -152,6 +119,36 @@ service cloud.firestore {
   // authorized view with sidebar
   const view = typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '';
 
+  async function fetchStatsAndLogs() {
+    setStatsLoading(true);
+    setLogsLoading(true);
+    try {
+      const [vRes, pRes, tRes, cRes, aRes] = await Promise.all([
+        supabase.from('videos').select('id', { count: 'exact', head: true }),
+        supabase.from('photos').select('id', { count: 'exact', head: true }),
+        supabase.from('terms').select('id', { count: 'exact', head: true }),
+        supabase.from('vocabulary_categories').select('id', { count: 'exact', head: true }),
+        supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
+      ]);
+
+      setStats({
+        videos: vRes?.count || 0,
+        photos: pRes?.count || 0,
+        terms: tRes?.count || 0,
+        categories: cRes?.count || 0,
+      });
+
+      if (aRes && !aRes.error && Array.isArray(aRes.data)) setAuditLogs(aRes.data);
+      else setAuditLogs([]);
+    } catch (err) {
+      console.error('Fetch stats/logs error', err);
+      setModal({ open: true, variant: 'error', title: 'Fetch error', message: String(err) });
+    } finally {
+      setStatsLoading(false);
+      setLogsLoading(false);
+    }
+  }
+
   return (
     <div className="auth-screen gradient-bg-full admin-layout">
       <Sidebar />
@@ -168,33 +165,53 @@ service cloud.firestore {
           <TermsManager />
         ) : view === 'vocabulary_categories' ? (
           <VocabularyCategoriesManager />
-        ) : view === 'photos' ? (
-          <PhotosManager />
+        ) : view === 'users' ? (
+          <UsersManager />
         ) : view === 'videos' ? (
           <VideosManager />
         ) : view === 'quizzes' ? (
           <QuizzesManager />
-        ) : view === 'videos' ? (
-          <VideosManager />
         ) : (
-          <>
-            <FirestoreStatus db={db} />
-            <section style={{ marginTop: '1rem', background: '#fff', padding: '1rem', borderRadius: 8 }}>
-              <h3>Admin controls</h3>
-              <p>Welcome to the admin dashboard. Use the sidebar to navigate to different sections.</p>
-              <div style={{ marginTop: '0.75rem' }}>
-                <strong>Firestore status:</strong> {fsStatus}
-                {fsStatus === 'error' && (
-                  <div style={{ marginTop: '0.5rem', color: '#b93a3a' }}>
-                    Permission denied when reading Firestore. To allow this admin user read access, you can update your Firestore rules.
-                    <div style={{ marginTop: '0.5rem' }}>
-                      <button className="btn" onClick={showRulesGuide}>Show rules to deploy</button>
-                    </div>
-                  </div>
-                )}
+          <section style={{ marginTop: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+              <div style={{ flex: 1, background: '#fff', padding: '1rem', borderRadius: 8 }}>
+                <h4 style={{ margin: 0 }}>Total Videos</h4>
+                <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '.5rem' }}>{statsLoading ? '...' : stats.videos}</div>
               </div>
-            </section>
-          </>
+              <div style={{ flex: 1, background: '#fff', padding: '1rem', borderRadius: 8 }}>
+                <h4 style={{ margin: 0 }}>Total Photos</h4>
+                <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '.5rem' }}>{statsLoading ? '...' : stats.photos}</div>
+              </div>
+              <div style={{ flex: 1, background: '#fff', padding: '1rem', borderRadius: 8 }}>
+                <h4 style={{ margin: 0 }}>Total Terms</h4>
+                <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '.5rem' }}>{statsLoading ? '...' : stats.terms}</div>
+              </div>
+              <div style={{ flex: 1, background: '#fff', padding: '1rem', borderRadius: 8 }}>
+                <h4 style={{ margin: 0 }}>Total Categories</h4>
+                <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '.5rem' }}>{statsLoading ? '...' : stats.categories}</div>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', padding: '1rem', borderRadius: 8 }}>
+              <h3 style={{ marginTop: 0 }}>Recent Audit Logs</h3>
+              {logsLoading ? (
+                <div>Loading audit logs…</div>
+              ) : auditLogs.length === 0 ? (
+                <div style={{ color: '#666' }}>No audit logs found. To capture audit logs, create an `audit_logs` table and triggers in your database.</div>
+              ) : (
+                <table className="admin-table">
+                  <thead>
+                    <tr><th>When</th><th>Table</th><th>Op</th><th>User</th><th>Details</th></tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map(a => (
+                      <tr key={a.id}><td>{new Date(a.created_at).toLocaleString()}</td><td>{a.table_name}</td><td>{a.operation}</td><td style={{ maxWidth: 180, wordBreak: 'break-all' }}>{a.changed_by || a.user || '-'}</td><td style={{ maxWidth: 540, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{JSON.stringify(a.details || a.new_data || a.payload || a.new_row || a)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
         )}
       </main>
       <Modal open={modal.open} title={modal.title} message={modal.message} onClose={closeModal} variant={modal.variant} />
@@ -202,35 +219,3 @@ service cloud.firestore {
   );
 }
 
-function FirestoreStatus({ db }) {
-  const [status, setStatus] = useState('checking');
-
-  useEffect(() => {
-    let mounted = true;
-    async function check() {
-      try {
-        // try reading a small doc; it's ok if it doesn't exist
-        const ref = doc(db, 'meta', 'status');
-        const snap = await getDoc(ref);
-        if (!mounted) return;
-        if (snap.exists()) {
-          const data = snap.data();
-          setStatus(`connected — ${data.message || 'ok'}`);
-        } else {
-          setStatus('connected — OK (no status doc)');
-        }
-      } catch (err) {
-        console.error('Firestore check failed', err);
-        if (mounted) setStatus('error: ' + (err.message || String(err)));
-      }
-    }
-    check();
-    return () => { mounted = false; };
-  }, [db]);
-
-  return (
-    <div style={{ marginBottom: '0.6rem', color: '#444' }}>
-      Firestore: <strong>{status}</strong>
-    </div>
-  );
-}

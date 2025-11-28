@@ -2,15 +2,17 @@ import React, { useEffect, useState } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../AuthProvider';
 
 export default function PhotosManager() {
+  const { user } = useAuth();
   const [photos, setPhotos] = useState([]);
   const [categories, setCategories] = useState([]);
   const [terms, setTerms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, title: '', message: '', variant: 'info' });
   const [formModal, setFormModal] = useState({ open: false, mode: 'add', photo: null });
-  const [formData, setFormData] = useState({ id: '', url: '', active: true });
+  const [formData, setFormData] = useState({ url: '', active: true, categoryId: '', termId: '' });
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   useEffect(() => { fetchPhotos(); }, []);
@@ -35,17 +37,22 @@ export default function PhotosManager() {
     } finally { setLoading(false); }
   }
 
-  function openAdd() { setFormData({ id: '', url: '', categoryId: '', termId: '', videoUrl: '', active: true }); setFormModal({ open: true, mode: 'add', photo: null }); }
-  function openEdit(p) { setFormData({ id: p.id || '', url: p.url || '', categoryId: p.categoryId || '', termId: p.termId || '', videoUrl: p.videoUrl || '', active: !!p.active }); setFormModal({ open: true, mode: 'edit', photo: p }); }
-  function closeForm() { setFormModal({ open: false, mode: 'add', photo: null }); setFormData({ id: '', url: '', categoryId: '', termId: '', videoUrl: '', active: true }); }
+  function openAdd() {
+    setFormData({ url: '', categoryId: '', termId: '', active: true });
+    setFormModal({ open: true, mode: 'add', photo: null });
+  }
+  function openEdit(p) {
+    setFormData({ url: p.url || '', categoryId: p.categoryId || '', termId: p.termId || '', active: !!p.active });
+    setFormModal({ open: true, mode: 'edit', photo: p });
+  }
+  function closeForm() {
+    setFormModal({ open: false, mode: 'add', photo: null });
+    setFormData({ url: '', categoryId: '', termId: '', active: true });
+  }
 
   function validate() {
     if (!formData.url || typeof formData.url !== 'string' || !formData.url.match(/^https?:\/\/.+/)) {
-      setModal({ open: true, variant: 'error', title: 'Validation', message: 'Please provide a valid http/https URL.' });
-      return false;
-    }
-    if (formData.videoUrl && typeof formData.videoUrl === 'string' && !formData.videoUrl.match(/^https?:\/\//)) {
-      setModal({ open: true, variant: 'error', title: 'Validation', message: 'Please provide a valid video URL (http/https) or leave empty.' });
+      setModal({ open: true, variant: 'error', title: 'Validation', message: 'Please enter a valid image URL (http/https).' });
       return false;
     }
     return true;
@@ -56,11 +63,9 @@ export default function PhotosManager() {
     try {
       const payload = {
         url: formData.url.trim(),
-        categoryId: formData.categoryId || '',
-        termId: formData.termId || '',
-        videoUrl: formData.videoUrl || '',
+        categoryId: formData.categoryId || null,
+        termId: formData.termId || null,
         active: !!formData.active,
-        id: formData.id && typeof formData.id === 'string' && formData.id.trim().length > 0 ? formData.id.trim() : undefined,
       };
       let res;
       if (formModal.mode === 'add') {
@@ -70,7 +75,7 @@ export default function PhotosManager() {
         setModal({ open: true, variant: 'success', title: 'Added', message: 'Photo created' });
       } else {
         payload.updatedAt = new Date().toISOString();
-        res = await supabase.from('photos').update(payload).eq('id', formData.id);
+        res = await supabase.from('photos').update(payload).eq('id', formModal.photo.id);
         if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Updated', message: 'Photo updated' });
       }
@@ -102,7 +107,7 @@ export default function PhotosManager() {
   return (
     <div style={{ padding: '1.25rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h3>Photos (Works)</h3>
+        <h3>Photos</h3>
         <button className="btn primary" onClick={openAdd}>+ Add Photo</button>
       </div>
 
@@ -113,20 +118,34 @@ export default function PhotosManager() {
       ) : (
         <table className="admin-table">
           <thead>
-            <tr><th>ID</th><th>URL</th><th>Category</th><th>Term</th><th>Video</th><th>Active</th><th>Actions</th></tr>
+            <tr>
+              <th>ID</th>
+              <th>Photo URL</th>
+              <th>Preview</th>
+              <th>Category</th>
+              <th>Term</th>
+              <th>Active</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody>
             {photos.map(p => (
               <tr key={p.docId}>
                 <td>{p.id || '-'}</td>
-                <td style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.url}</td>
+                <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.url || '-'}</td>
+                <td style={{ width: 160 }}>
+                  {p.url ? (
+                    <div style={{ width: '100%', maxWidth: 240 }}>
+                      <img src={p.url} alt="photo" loading="lazy" style={{ width: '100%', height: 'auto', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
+                    </div>
+                  ) : '-'}
+                </td>
                 <td>{(categories.find(c => c.docId === p.categoryId) || {}).name || '-'}</td>
                 <td>{(terms.find(t => t.docId === p.termId) || {}).name || '-'}</td>
-                <td style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.videoUrl ? <a href={p.videoUrl} target="_blank" rel="noopener noreferrer">{(p.videoUrl || '').slice(0, 60)}</a> : '-'}</td>
                 <td>{p.active ? 'Yes' : 'No'}</td>
                 <td>
                   <button className="btn-small" onClick={() => openEdit(p)}>Edit</button>
-                  <button className="btn-small" onClick={() => setFormData(prev => ({ ...prev, active: !p.active })) || openEdit(p)}>{p.active ? 'Deactivate' : 'Activate'}</button>
+                  <button className="btn-small" onClick={() => { setFormData(prev => ({ ...prev, active: !p.active })); openEdit(p); }}>{p.active ? 'Deactivate' : 'Activate'}</button>
                   <button className="btn-small delete" onClick={() => setDeleteConfirm(p)}>Delete</button>
                 </td>
               </tr>
@@ -140,8 +159,9 @@ export default function PhotosManager() {
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <header className="modal-header"><h3>{formModal.mode === 'add' ? 'Add Photo' : 'Edit Photo'}</h3></header>
             <div className="modal-body">
-              <label className="field"><span>ID (optional)</span><input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} /></label>
-              <label className="field"><span>URL *</span><input type="text" value={formData.url} onChange={e => setFormData({ ...formData, url: e.target.value })} required /></label>
+              <label className="field"><span>Photo URL *</span>
+                <input type="text" value={formData.url} onChange={e => setFormData({ ...formData, url: e.target.value })} placeholder="https://example.com/photo.jpg" required />
+              </label>
               <label className="field"><span>Category</span>
                 <select value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value, termId: '' })}>
                   <option value="">-- none --</option>
@@ -154,8 +174,12 @@ export default function PhotosManager() {
                   {filteredTerms.map(t => <option key={t.docId} value={t.docId}>{t.name}</option>)}
                 </select>
               </label>
-              <label className="field"><span>Video URL (optional)</span><input type="text" value={formData.videoUrl} onChange={e => setFormData({ ...formData, videoUrl: e.target.value })} placeholder="https://..." /></label>
-              <label className="field"><span>Active</span><select value={formData.active ? 'true' : 'false'} onChange={e => setFormData({ ...formData, active: e.target.value === 'true' })}><option value="true">Active</option><option value="false">Inactive</option></select></label>
+              <label className="field"><span>Active</span>
+                <select value={formData.active ? 'true' : 'false'} onChange={e => setFormData({ ...formData, active: e.target.value === 'true' })}>
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </label>
             </div>
             <footer className="modal-footer"><button className="btn" onClick={closeForm}>Cancel</button><button className="btn primary" onClick={handleSave}>Save</button></footer>
           </div>

@@ -6,11 +6,12 @@ import { supabase } from '../supabaseClient';
 export default function VideosManager() {
   const [videos, setVideos] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [terms, setTerms] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState({ open: false, title: '', message: '', variant: 'info' });
   const [formModal, setFormModal] = useState({ open: false, mode: 'add', video: null });
-  const [formData, setFormData] = useState({ id: '', url: '', categoryId: '', photoIds: [], active: true });
+  const [formData, setFormData] = useState({ id: '', url: '', categoryId: '', termId: '', photoIds: [], active: true });
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   useEffect(() => { fetchAll(); }, []);
@@ -18,13 +19,21 @@ export default function VideosManager() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [vRes, cRes, pRes] = await Promise.all([
+      const [vRes, cRes, tRes, pRes] = await Promise.all([
         supabase.from('videos').select('*').order('createdAt', { ascending: false }),
         supabase.from('vocabulary_categories').select('*').order('name', { ascending: true }),
+        supabase.from('terms').select('*').order('name', { ascending: true }),
         supabase.from('photos').select('*').order('createdAt', { ascending: false }),
       ]);
+
+      if (vRes.error) throw vRes.error;
+      if (cRes.error) throw cRes.error;
+      if (tRes.error) throw tRes.error;
+      if (pRes.error) throw pRes.error;
+
       setVideos((vRes.data || []).map(d => ({ ...d, docId: d.id })));
       setCategories((cRes.data || []).map(d => ({ ...d, docId: d.id })));
+      setTerms((tRes.data || []).map(d => ({ ...d, docId: d.id })));
       setPhotos((pRes.data || []).map(d => ({ ...d, docId: d.id })));
     } catch (err) {
       console.error('Fetch videos error', err);
@@ -32,8 +41,8 @@ export default function VideosManager() {
     } finally { setLoading(false); }
   }
 
-  function openAdd() { setFormData({ id: '', url: '', categoryId: '', photoIds: [], active: true }); setFormModal({ open: true, mode: 'add', video: null }); }
-  function openEdit(v) { setFormData({ id: v.id || '', url: v.url || '', categoryId: v.categoryId || '', photoIds: v.photoIds || [], active: !!v.active }); setFormModal({ open: true, mode: 'edit', video: v }); }
+  function openAdd() { setFormData({ id: '', url: '', categoryId: '', termId: '', photoIds: [], active: true }); setFormModal({ open: true, mode: 'add', video: null }); }
+  function openEdit(v) { setFormData({ id: v.id || '', url: v.url || '', categoryId: v.categoryId || '', termId: v.termId || '', photoIds: Array.isArray(v.photoIds) ? v.photoIds : (v.photoIds || []), active: !!v.active }); setFormModal({ open: true, mode: 'edit', video: v }); }
   function closeForm() { setFormModal({ open: false, mode: 'add', video: null }); setFormData({ id: '', url: '', categoryId: '', photoIds: [], active: true }); }
 
   function validate() {
@@ -48,21 +57,28 @@ export default function VideosManager() {
     if (!validate()) return;
     try {
       const payload = {
-        url: formData.url,
-        categoryId: formData.categoryId || '',
-        photoIds: formData.photoIds || [],
+        url: formData.url.trim(),
+        categoryId: formData.categoryId || null,
+        termId: formData.termId || null,
+        photoIds: Array.isArray(formData.photoIds) ? formData.photoIds : (formData.photoIds ? [formData.photoIds] : []),
         active: !!formData.active,
-        id: formData.id && typeof formData.id === 'string' && formData.id.trim().length > 0 ? formData.id.trim() : undefined,
       };
       let res;
       if (formModal.mode === 'add') {
+        // Do not send `id` on insert — allow Postgres to generate a UUID id
         payload.createdAt = new Date().toISOString();
         res = await supabase.from('videos').insert([payload]);
         if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Added', message: 'Video created' });
       } else {
+        // Edit mode: require an id to update
+        const idToUpdate = formData.id;
+        if (!idToUpdate) {
+          setModal({ open: true, variant: 'error', title: 'Validation', message: 'Missing video id for update.' });
+          return;
+        }
         payload.updatedAt = new Date().toISOString();
-        res = await supabase.from('videos').update(payload).eq('id', formData.id);
+        res = await supabase.from('videos').update(payload).eq('id', idToUpdate);
         if (res.error) throw res.error;
         setModal({ open: true, variant: 'success', title: 'Updated', message: 'Video updated' });
       }
@@ -103,11 +119,11 @@ export default function VideosManager() {
       ) : (
         <table className="admin-table">
           <thead>
-            <tr><th>ID</th><th>Video URL</th><th>Category</th><th>Photos</th><th>Active</th><th>Actions</th></tr>
+            <tr><th>ID</th><th>Video URL</th><th>Category</th><th>Term</th><th>Photos</th><th>Active</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {videos.map(v => (
-              <tr key={v.docId}><td>{v.id || '-'}</td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{(v.url || '').slice(0, 60)}...</a></td><td>{(categories.find(c => c.docId === v.categoryId) || {}).name || '-'}</td><td>{(v.photoIds || []).length}</td><td>{v.active ? 'Yes' : 'No'}</td><td>
+              <tr key={v.docId}><td>{v.id || '-'}</td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{(v.url || '').slice(0, 60)}...</a></td><td>{(categories.find(c => c.docId === v.categoryId) || {}).name || '-'}</td><td>{(terms.find(t => t.docId === v.termId) || {}).name || '-'}</td><td>{(v.photoIds || []).length}</td><td>{v.active ? 'Yes' : 'No'}</td><td>
                 <button className="btn-small" onClick={() => openEdit(v)}>Edit</button>
                 <button className="btn-small delete" onClick={() => setDeleteConfirm(v)}>Delete</button>
               </td></tr>
@@ -121,14 +137,24 @@ export default function VideosManager() {
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <header className="modal-header"><h3>{formModal.mode === 'add' ? 'Add Video' : 'Edit Video'}</h3></header>
             <div className="modal-body">
-              <label className="field"><span>ID (optional)</span><input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} /></label>
+              {formModal.mode === 'edit' && (
+                <label className="field"><span>ID</span><input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} readOnly /></label>
+              )}
               <label className="field"><span>Video URL *</span><input type="text" value={formData.url} onChange={e => setFormData({ ...formData, url: e.target.value })} required placeholder="https://www.youtube.com/watch?v=VIDEO_ID" /></label>
               <label className="field"><span>Category</span>
-                <select value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value })}>
+                <select value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value, termId: '' })}>
                   <option value="">-- none --</option>
                   {categories.map(c => <option key={c.docId} value={c.docId}>{c.name}</option>)}
                 </select>
               </label>
+              {formData.categoryId && (
+                <label className="field"><span>Term</span>
+                  <select value={formData.termId} onChange={e => setFormData({ ...formData, termId: e.target.value })}>
+                    <option value="">-- none --</option>
+                    {terms.filter(t => t.categoryId === formData.categoryId).map(t => <option key={t.docId} value={t.docId}>{t.name}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="field"><span>Attach Photos</span>
                 <select multiple value={formData.photoIds} onChange={e => setFormData({ ...formData, photoIds: Array.from(e.target.selectedOptions).map(o => o.value) })} style={{ minHeight: 80 }}>
                   {photos.map(p => <option key={p.docId} value={p.docId}>{(p.id || p.docId) + ' — ' + (p.url || '').slice(0, 60)}</option>)}

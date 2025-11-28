@@ -3,6 +3,14 @@ import '../App.css';
 import Modal from '../components/Modal';
 import { supabase } from '../supabaseClient';
 
+// Reusable loader for other UI to consume
+export async function getAllCategories() {
+  // `icon` column was removed from the DB; select only existing columns
+  const res = await supabase.from('vocabulary_categories').select('id,name').order('name', { ascending: true });
+  if (res.error) throw res.error;
+  return res.data || [];
+}
+
 export default function VocabularyCategoriesManager() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +38,10 @@ export default function VocabularyCategoriesManager() {
   function closeForm() { setFormModal({ open: false, mode: 'add', category: null }); setFormData({ id: '', name: '' }); }
 
   async function handleSave() {
-    if (!formData.name.trim()) { setModal({ open: true, variant: 'error', title: 'Validation', message: 'Name is required' }); return; }
+    if (!formData.id.trim() || !formData.name.trim()) {
+      setModal({ open: true, variant: 'error', title: 'Validation', message: 'ID and Name are required' });
+      return;
+    }
     try {
       const payload = {
         id: formData.id || undefined,
@@ -85,14 +96,26 @@ export default function VocabularyCategoriesManager() {
       ) : (
         <table className="admin-table">
           <thead>
-            <tr><th>ID</th><th>Name</th><th>Actions</th></tr>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Created At</th>
+              <th>Updated At</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody>
             {categories.map(cat => (
-              <tr key={cat.docId}><td>{cat.id || '-'}</td><td>{cat.name}</td><td>
-                <button className="btn-small" onClick={() => openEdit(cat)}>Edit</button>
-                <button className="btn-small delete" onClick={() => setDeleteConfirm(cat)}>Delete</button>
-              </td></tr>
+              <tr key={cat.docId}>
+                <td>{cat.id || '-'}</td>
+                <td>{cat.name}</td>
+                <td>{cat.createdAt ? new Date(cat.createdAt).toLocaleString() : '-'}</td>
+                <td>{cat.updatedAt ? new Date(cat.updatedAt).toLocaleString() : '-'}</td>
+                <td>
+                  <button className="btn-small" onClick={() => openEdit(cat)}>Edit</button>
+                  <button className="btn-small delete" onClick={() => setDeleteConfirm(cat)}>Delete</button>
+                </td>
+              </tr>
             ))}
           </tbody>
         </table>
@@ -103,7 +126,7 @@ export default function VocabularyCategoriesManager() {
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <header className="modal-header"><h3>{formModal.mode === 'add' ? 'Add Category' : 'Edit Category'}</h3></header>
             <div className="modal-body">
-              <label className="field"><span>ID (optional)</span><input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} /></label>
+              <label className="field"><span>ID *</span><input type="text" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} required /></label>
               <label className="field"><span>Name *</span><input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required /></label>
             </div>
             <footer className="modal-footer"><button className="btn" onClick={closeForm}>Cancel</button><button className="btn primary" onClick={handleSave}>Save</button></footer>
