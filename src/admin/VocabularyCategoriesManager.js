@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
 import { supabase } from '../supabaseClient';
@@ -14,10 +14,29 @@ export async function getAllCategories() {
 export default function VocabularyCategoriesManager() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  // filters / search / sort
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
   const [modal, setModal] = useState({ open: false, title: '', message: '', variant: 'info' });
   const [formModal, setFormModal] = useState({ open: false, mode: 'add', category: null });
   const [formData, setFormData] = useState({ id: '', name: '' });
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  // memoized filtered categories (run hooks unconditionally before any early returns)
+  const filteredCategories = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    let list = Array.isArray(categories) ? categories.slice() : [];
+    if (q) list = list.filter(c => ((c.name || '').toLowerCase().includes(q) || (String(c.id || '')).toLowerCase().includes(q)));
+    list.sort((a, b) => {
+      const av = (a[sortBy] || '').toString();
+      const bv = (b[sortBy] || '').toString();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [categories, searchQuery, sortBy, sortDir]);
 
   useEffect(() => { fetchCategories(); }, []);
 
@@ -89,9 +108,24 @@ export default function VocabularyCategoriesManager() {
         <button className="btn primary" onClick={openAdd}>+ Add Category</button>
       </div>
 
-      {categories.length === 0 ? (
+      {/* Filters */}
+      <div className="filters-bar" style={{ marginBottom: 12 }}>
+        <input placeholder="Search id or name" className="field" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ minWidth: 260 }} />
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>Sort:
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <option value="name">Name</option>
+            <option value="id">ID</option>
+          </select>
+        </label>
+        <select value={sortDir} onChange={e => setSortDir(e.target.value)}>
+          <option value="asc">Asc</option>
+          <option value="desc">Desc</option>
+        </select>
+      </div>
+
+      {filteredCategories.length === 0 ? (
         <div style={{ background: '#f5f7fb', padding: '2rem', borderRadius: 8, textAlign: 'center', color: '#666' }}>
-          No categories yet. <button className="btn" onClick={openAdd} style={{ marginLeft: '0.5rem' }}>Create one</button>
+          No categories match your filters. <button className="btn" onClick={openAdd} style={{ marginLeft: '0.5rem' }}>Create one</button>
         </div>
       ) : (
         <table className="admin-table">
@@ -105,7 +139,7 @@ export default function VocabularyCategoriesManager() {
             </tr>
           </thead>
           <tbody>
-            {categories.map(cat => (
+            {filteredCategories.map(cat => (
               <tr key={cat.docId}>
                 <td>{cat.id || '-'}</td>
                 <td>{cat.name}</td>

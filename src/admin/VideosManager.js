@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
 import { supabase } from '../supabaseClient';
@@ -13,6 +13,13 @@ export default function VideosManager() {
   const [formModal, setFormModal] = useState({ open: false, mode: 'add', video: null });
   const [formData, setFormData] = useState({ id: '', url: '', categoryId: '', termId: '', photoIds: [], active: true });
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // UI state: search / filters / sort
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterTermId, setFilterTermId] = useState('');
+  const [filterActive, setFilterActive] = useState('any'); // 'any' | 'true' | 'false'
+  const [sortBy, setSortBy] = useState('createdAt'); // createdAt | url | active
+  const [sortDir, setSortDir] = useState('desc'); // asc | desc
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -103,18 +110,86 @@ export default function VideosManager() {
     }
   }
 
+  // derive filtered + sorted list
+  const filteredVideos = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    let list = Array.isArray(videos) ? videos.slice() : [];
+    if (q) {
+      list = list.filter(v => ((v.url || '').toLowerCase().includes(q) || (String(v.id || '')).toLowerCase().includes(q)));
+    }
+    if (filterCategoryId) list = list.filter(v => v.categoryId === filterCategoryId);
+    if (filterTermId) list = list.filter(v => v.termId === filterTermId);
+    if (filterActive === 'true') list = list.filter(v => !!v.active);
+    if (filterActive === 'false') list = list.filter(v => !v.active);
+
+    // sorting
+    list.sort((a, b) => {
+      let av = a[sortBy];
+      let bv = b[sortBy];
+      if (sortBy === 'createdAt') {
+        av = av ? new Date(av).getTime() : 0;
+        bv = bv ? new Date(bv).getTime() : 0;
+      }
+      if (sortBy === 'url' || sortBy === 'active') {
+        av = av || '';
+        bv = bv || '';
+      }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [videos, searchQuery, filterCategoryId, filterTermId, filterActive, sortBy, sortDir]);
+
   if (loading) return <div style={{ padding: '1rem' }}>Loading videos...</div>;
 
   return (
     <div style={{ padding: '1.25rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h3>Videos</h3>
-        <button className="btn primary" onClick={openAdd}>+ Add Video</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn primary" onClick={openAdd}>+ Add Video</button>
+        </div>
       </div>
 
-      {videos.length === 0 ? (
+      {/* Filters & search */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <input placeholder="Search URL or ID" className="field" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ minWidth: 220 }} />
+
+        <select value={filterCategoryId} onChange={e => { setFilterCategoryId(e.target.value); setFilterTermId(''); }}>
+          <option value="">All categories</option>
+          {categories.map(c => <option key={c.docId} value={c.docId}>{c.name}</option>)}
+        </select>
+
+        <select value={filterTermId} onChange={e => setFilterTermId(e.target.value)}>
+          <option value="">All terms</option>
+          {terms.filter(t => !filterCategoryId || t.categoryId === filterCategoryId).map(t => <option key={t.docId} value={t.docId}>{t.name}</option>)}
+        </select>
+
+        <select value={filterActive} onChange={e => setFilterActive(e.target.value)}>
+          <option value="any">Any</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          Sort:
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <option value="createdAt">Created</option>
+            <option value="url">URL</option>
+            <option value="active">Active</option>
+          </select>
+        </label>
+
+        <select value={sortDir} onChange={e => setSortDir(e.target.value)}>
+          <option value="desc">Desc</option>
+          <option value="asc">Asc</option>
+        </select>
+      </div>
+
+      {filteredVideos.length === 0 ? (
         <div style={{ background: '#f5f7fb', padding: '2rem', borderRadius: 8, textAlign: 'center', color: '#666' }}>
-          No videos yet. <button className="btn" onClick={openAdd} style={{ marginLeft: '0.5rem' }}>Create one</button>
+          No videos match your filters. <button className="btn" onClick={openAdd} style={{ marginLeft: '0.5rem' }}>Create one</button>
         </div>
       ) : (
         <table className="admin-table">
@@ -122,7 +197,7 @@ export default function VideosManager() {
             <tr><th>ID</th><th>Video URL</th><th>Category</th><th>Term</th><th>Photos</th><th>Active</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            {videos.map(v => (
+            {filteredVideos.map(v => (
               <tr key={v.docId}><td>{v.id || '-'}</td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{(v.url || '').slice(0, 60)}...</a></td><td>{(categories.find(c => c.docId === v.categoryId) || {}).name || '-'}</td><td>{(terms.find(t => t.docId === v.termId) || {}).name || '-'}</td><td>{(v.photoIds || []).length}</td><td>{v.active ? 'Yes' : 'No'}</td><td>
                 <button className="btn-small" onClick={() => openEdit(v)}>Edit</button>
                 <button className="btn-small delete" onClick={() => setDeleteConfirm(v)}>Delete</button>

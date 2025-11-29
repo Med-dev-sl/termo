@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import '../App.css';
 import Modal from '../components/Modal';
 import { supabase } from '../supabaseClient';
@@ -14,6 +14,41 @@ export default function PhotosManager() {
   const [formModal, setFormModal] = useState({ open: false, mode: 'add', photo: null });
   const [formData, setFormData] = useState({ url: '', active: true, categoryId: '', termId: '' });
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // filters / search / sort
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterTermId, setFilterTermId] = useState('');
+  const [filterActive, setFilterActive] = useState('any');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortDir, setSortDir] = useState('desc');
+  useEffect(() => { fetchPhotos(); }, []);
+
+  // memoized filtered lists (keep hooks unconditional and before any early returns)
+  const filteredTerms = formData.categoryId ? terms.filter(t => t.categoryId === formData.categoryId) : [];
+
+  const filteredPhotos = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    let list = Array.isArray(photos) ? photos.slice() : [];
+    if (q) {
+      list = list.filter(p => ((p.url || '').toLowerCase().includes(q) || (String(p.id || '')).toLowerCase().includes(q)));
+    }
+    if (filterCategoryId) list = list.filter(p => p.categoryId === filterCategoryId);
+    if (filterTermId) list = list.filter(p => p.termId === filterTermId);
+    if (filterActive === 'true') list = list.filter(p => !!p.active);
+    if (filterActive === 'false') list = list.filter(p => !p.active);
+
+    list.sort((a, b) => {
+      let av = a[sortBy];
+      let bv = b[sortBy];
+      if (sortBy === 'createdAt') { av = av ? new Date(av).getTime() : 0; bv = bv ? new Date(bv).getTime() : 0; }
+      av = av || '';
+      bv = bv || '';
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [photos, searchQuery, filterCategoryId, filterTermId, filterActive, sortBy, sortDir]);
 
   useEffect(() => { fetchPhotos(); }, []);
 
@@ -102,8 +137,6 @@ export default function PhotosManager() {
 
   if (loading) return <div style={{ padding: '1rem' }}>Loading photos...</div>;
 
-  const filteredTerms = formData.categoryId ? terms.filter(t => t.categoryId === formData.categoryId) : [];
-
   return (
     <div style={{ padding: '1.25rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -111,9 +144,38 @@ export default function PhotosManager() {
         <button className="btn primary" onClick={openAdd}>+ Add Photo</button>
       </div>
 
-      {photos.length === 0 ? (
+      {/* Filters */}
+      <div className="filters-bar" style={{ marginBottom: 12 }}>
+        <input placeholder="Search URL or ID" className="field" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+        <select value={filterCategoryId} onChange={e => { setFilterCategoryId(e.target.value); setFilterTermId(''); }}>
+          <option value="">All categories</option>
+          {categories.map(c => <option key={c.docId} value={c.docId}>{c.name}</option>)}
+        </select>
+        <select value={filterTermId} onChange={e => setFilterTermId(e.target.value)}>
+          <option value="">All terms</option>
+          {terms.filter(t => !filterCategoryId || t.categoryId === filterCategoryId).map(t => <option key={t.docId} value={t.docId}>{t.name}</option>)}
+        </select>
+        <select value={filterActive} onChange={e => setFilterActive(e.target.value)}>
+          <option value="any">Any</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          Sort:
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <option value="createdAt">Created</option>
+            <option value="url">URL</option>
+          </select>
+        </label>
+        <select value={sortDir} onChange={e => setSortDir(e.target.value)}>
+          <option value="desc">Desc</option>
+          <option value="asc">Asc</option>
+        </select>
+      </div>
+
+      {filteredPhotos.length === 0 ? (
         <div style={{ background: '#f5f7fb', padding: '2rem', borderRadius: 8, textAlign: 'center', color: '#666' }}>
-          No photos yet. <button className="btn" onClick={openAdd} style={{ marginLeft: '0.5rem' }}>Create one</button>
+          No photos match your filters. <button className="btn" onClick={openAdd} style={{ marginLeft: '0.5rem' }}>Create one</button>
         </div>
       ) : (
         <table className="admin-table">
@@ -129,7 +191,7 @@ export default function PhotosManager() {
             </tr>
           </thead>
           <tbody>
-            {photos.map(p => (
+            {filteredPhotos.map(p => (
               <tr key={p.docId}>
                 <td>{p.id || '-'}</td>
                 <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.url || '-'}</td>

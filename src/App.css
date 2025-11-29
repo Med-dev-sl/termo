@@ -377,3 +377,35 @@ textarea { padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-si
 .control-btn { padding:6px 8px; border-radius:8px; border:none; background:transparent; cursor:pointer; color:var(--text); }
 .control-btn:active { transform:translateY(1px); }
 
+/* VideosManager / admin filters styling */
+.filters-bar { display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.filters-bar .field { margin: 0; }
+input.field, .filters-bar input[type="text"], .filters-bar input[type="search"] {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e6e6e6;
+  background: var(--panel-bg, #fff);
+  min-width: 220px;
+  box-shadow: var(--card-shadow, none);
+}
+.filters-bar select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #e6e6e6;
+  background: #fff;
+}
+.filters-bar label { font-size: 0.95rem; color: var(--muted, #64748b); display: inline-flex; gap:6px; align-items:center; }
+.filters-summary { margin-left: auto; color: var(--muted); font-size: 0.95rem; }
+
+/* Make admin table responsive on small screens */
+@media (max-width: 820px) {
+  .admin-table thead { display: none; }
+  .admin-table, .admin-table tbody, .admin-table tr, .admin-table td { display: block; width: 100%; }
+  .admin-table tr { margin-bottom: 12px; border-radius: 8px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 12px; }
+  .admin-table td { display: flex; justify-content: space-between; padding: 6px 8px; border: none; }
+  .admin-table td::before { content: attr(data-label); font-weight: 600; color: #334155; margin-right: 8px; }
+}
+
+/* Small utility for badge/count */
+.badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#eef2ff; color:#0b3d91; font-weight:600; font-size:0.85rem; }
+
