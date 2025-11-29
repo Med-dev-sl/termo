@@ -55,7 +55,10 @@ export default function Onboarding() {
               // after pause, advance
               setTimeout(() => {
                 if (index < slides.length - 1) setIndex(idx => idx + 1);
-                else setView('login');
+                else {
+                  try { localStorage.setItem('seenOnboarding', '1'); } catch (e) {}
+                  setView('login');
+                }
               }, 1500);
             }
           }, 25);
@@ -66,7 +69,10 @@ export default function Onboarding() {
     return () => clearInterval(typingInterval.current);
   }, [index, view]);
 
-  const skip = () => setView('login');
+  const skip = () => {
+    try { localStorage.setItem('seenOnboarding', '1'); } catch (e) {}
+    setView('login');
+  };
 
   if (view === 'login') return <Login onBack={() => setView('slides')} onSignup={() => setView('signup')} />;
   if (view === 'signup') return <Signup onBack={() => setView('slides')} onLogin={() => setView('login')} />;
@@ -90,7 +96,23 @@ export default function Onboarding() {
           <button className="btn" onClick={skip}>Skip</button>
         </div>
         <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 9999 }}>
-          <button className="btn primary" onClick={() => { if (phase === 'done') { if (index < slides.length - 1) setIndex(idx => idx + 1); else setView('login'); } else { setView('login'); } }}>{phase === 'done' ? (index < slides.length - 1 ? 'Next' : 'Continue to Login') : 'Continue to Login'}</button>
+          <button
+            className="btn primary"
+            onClick={() => {
+              if (phase === 'done') {
+                if (index < slides.length - 1) setIndex(idx => idx + 1);
+                else {
+                  try { localStorage.setItem('seenOnboarding', '1'); } catch (e) {}
+                  setView('login');
+                }
+              } else {
+                try { localStorage.setItem('seenOnboarding', '1'); } catch (e) {}
+                setView('login');
+              }
+            }}
+          >
+            {phase === 'done' ? (index < slides.length - 1 ? 'Next' : 'Continue to Login') : 'Continue to Login'}
+          </button>
         </div>
       </div>
     </section>
