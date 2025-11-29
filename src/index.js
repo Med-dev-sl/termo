@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { processQueue } from './offline/offlineQueue';
+import installFetchProxy from './offline/installFetchProxy';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -43,4 +45,22 @@ if ('serviceWorker' in navigator) {
       console.warn('Service worker registration failed:', err);
     });
   });
+}
+
+// Install fetch proxy to enqueue non-GET requests while offline.
+try {
+  // Only queue requests to our supabase base URL to avoid queuing unrelated requests.
+  installFetchProxy({ queueOnlyFor: ['supabase.co'] });
+} catch (e) {
+  console.warn('Failed to install fetch proxy', e);
+}
+
+// Try to flush any queued requests when back online
+window.addEventListener('online', () => {
+  try { processQueue(); } catch (e) { console.warn('processQueue failed', e); }
+});
+
+// Attempt to process queue on load if online
+if (navigator.onLine) {
+  processQueue().catch(e => console.warn('processQueue init failed', e));
 }
