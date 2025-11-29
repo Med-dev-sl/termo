@@ -3,7 +3,7 @@ import '../App.css';
 import Modal from '../components/Modal';
 import { authSignUp, authSignInWithProvider } from '../supabaseClient';
 
-export default function Signup({ onBack }) {
+export default function Signup({ onBack, onLogin }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,7 +50,6 @@ export default function Signup({ onBack }) {
       <div className="auth-card">
         <div className="auth-card-bar top" />
         <div className="auth-card-body">
-          <button className="link-back" onClick={onBack}>&larr; Back</button>
           <h3 className="auth-title">Create an account</h3>
           <form className="auth-form" onSubmit={submit}>
             <label className="field">
@@ -73,6 +72,10 @@ export default function Signup({ onBack }) {
             <button className="btn primary block" type="submit">Sign up</button>
             <div className="divider">or</div>
             <button type="button" className="btn google" onClick={google}>Sign up with Google</button>
+            <div style={{ marginTop: 12, textAlign: 'center' }}>
+              <span style={{ color: '#555', marginRight: 6 }}>Already have an account?</span>
+              <button type="button" className="btn" onClick={() => { if (onLogin) onLogin(); else window.location.href = '/login'; }}>Login</button>
+            </div>
           </form>
         </div>
         <div className="auth-card-bar bottom" />
